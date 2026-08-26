@@ -5,7 +5,7 @@ from tools.data_lookup import (
 )
 
 from tools.document_search import search_documents
-from tools.decision_engine import decide_cancellation
+from tools.decision_engine import decide_cancellation, decide_service_credit
 
 
 def investigate_cancellation(order_id):
@@ -174,6 +174,109 @@ conflict.
             "action_available": decision["decision"] == "allowed",
             "order_id": order_id,
             "account_id": result["account"]["account_id"]
+        }
+    
+    # ==========================================
+    # SERVICE CREDIT REQUEST
+    # ==========================================
+
+    if (
+        "service credit" in question_lower
+        or "service credits" in question_lower
+        or "credit" in question_lower
+    ):
+
+        # Find an order ID such as ORD-2002
+        order_id = None
+
+        for word in question.upper().replace("?", "").split():
+            if word.startswith("ORD-"):
+                order_id = word.strip(".,!?")
+
+        if not order_id:
+            return {
+                "answer": (
+                    "Please provide an order ID, "
+                    "for example ORD-2002."
+                ),
+                "tools_used": []
+            }
+
+        # Get order
+        order = get_order(order_id)
+
+        if not order:
+            return {
+                "answer": f"Order {order_id} was not found.",
+                "tools_used": ["get_order"]
+            }
+
+        # Get account
+        account = get_account(order["account_id"])
+
+        if not account:
+            return {
+                "answer": (
+                    f"Account {order['account_id']} "
+                    "was not found."
+                ),
+                "tools_used": [
+                    "get_order",
+                    "get_account"
+                ]
+            }
+
+        # Search relevant policies
+        documents = search_documents(
+            f"{account['account_name']} service credit"
+        )
+
+        # Make decision
+        decision = decide_service_credit(
+            order,
+            account,
+            documents
+        )
+
+        credit = decision.get("credit_inr")
+
+        if credit is None:
+            credit_display = "N/A"
+        else:
+            credit_display = f"INR {credit}"
+
+        answer = f"""
+### Service Credit Decision
+
+**Order:** {order_id}
+
+**Customer:** {account['account_name']}
+
+**Status:** {order['status']}
+
+**Decision:** {decision['decision'].upper()}
+
+**Service credit:** {credit_display}
+
+### Why?
+
+{decision['reason']}
+
+### Source Authority
+
+**Authority:** {decision.get('authority', 'unknown')}
+
+**Source:** {decision.get('source', 'Not specified')}
+"""
+
+        return {
+            "answer": answer,
+            "tools_used": [
+                "get_order",
+                "get_account",
+                "search_documents",
+                "decide_service_credit"
+            ]
         }
 
     # ==========================================

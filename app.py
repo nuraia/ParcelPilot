@@ -125,12 +125,10 @@ if question:
 
             if tools_used:
 
+                st.write("🔧 **Tools used**")
+
                 for tool in tools_used:
-
-                    st.write("🔧 **Tools used**")
-
-                    for tool in tools_used:
-                        st.write(f"✓ `{tool}`")
+                    st.write(f"✓ `{tool}`")
             # -------------------------------------------------
             # PENDING ACTION
             # -------------------------------------------------
