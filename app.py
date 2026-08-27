@@ -1,7 +1,10 @@
 import streamlit as st
 from agent import ask_agent
 from tools.issue_detection import generate_issue_report
+from tools.action_tools import create_escalation
 
+if "pending_action" not in st.session_state:
+    st.session_state.pending_action = None
 # ---------------------------------------------------------
 # PAGE CONFIG
 # ---------------------------------------------------------
@@ -98,28 +101,63 @@ if question:
     with st.chat_message("user"):
         st.write(question)
 
+    # -------------------------------------------------
+    # HANDLE CONFIRMATION
+    # -------------------------------------------------
 
-    # Assistant message
-    with st.chat_message("assistant"):
+    if (question.strip().lower() in ["yes", "y", "confirm"]
+        and st.session_state.pending_action
+    ):
 
+        pending = st.session_state.pending_action
+
+        escalation = create_escalation(
+            account_id=pending["account_id"],
+            ticket_id=pending["ticket_id"],
+            reason=pending["reason"],
+            priority=pending["priority"]
+        )
+
+        result = {
+            "answer": f"""
+    ### Escalation Created Successfully
+
+    **Escalation ID:** {escalation['escalation_id']}
+
+    **Ticket:** {escalation['ticket_id']}
+
+    **Priority:** {escalation['priority']}
+
+    **Status:** {escalation['status']}
+    """,
+            "tools_used": ["create_escalation"]
+        }
+
+        # Clear pending action
+        st.session_state.pending_action = None
+
+    else:
+
+        # Normal agent request
         with st.spinner("Investigating..."):
-
             result = ask_agent(question)
 
     # -------------------------------------------------
-    # DISPLAY ANSWER
+    # DISPLAY ASSISTANT RESPONSE
     # -------------------------------------------------
 
-    if isinstance(result, dict):
+    with st.chat_message("assistant"):
+
+        if isinstance(result, dict):
 
             answer = result.get("answer")
 
             if answer:
                 st.markdown(answer)
 
-            # -------------------------------------------------
+            # -----------------------------------------
             # TOOLS USED
-            # -------------------------------------------------
+            # -----------------------------------------
 
             tools_used = result.get("tools_used", [])
 
@@ -129,19 +167,23 @@ if question:
 
                 for tool in tools_used:
                     st.write(f"✓ `{tool}`")
-            # -------------------------------------------------
+
+            # -----------------------------------------
             # PENDING ACTION
-            # -------------------------------------------------
+            # -----------------------------------------
 
             pending_action = result.get("pending_action")
 
             if pending_action:
 
+                # Save the action for the next message
+                st.session_state.pending_action = pending_action
+
                 st.warning(
                     "⚠️ Confirmation required before creating this action."
                 )
 
-                st.write("**Proposed Action**")
+                st.write("### Proposed Action")
 
                 st.write(
                     f"**Ticket:** {pending_action.get('ticket_id')}"
@@ -159,7 +201,6 @@ if question:
                     "Reply **yes** to confirm the escalation."
                 )
 
-    else:
+        else:
 
-        # Fallback if agent returns plain text
-        st.markdown(str(result))
+            st.markdown(str(result))
